@@ -1,11 +1,11 @@
-# Copy into your profile repository as .github/workflows/koi.yml, then embed
-# <img src="koi/koi.gif" width="256" alt="My koi"> in its README.md.
+# Adaptive koi pond, built from finnsmith25-cmd/git-koi (a fork of yalongwastaken/git-koi, MIT).
+# Hourly, so the pond keeps up with the day's commits; it resets each midnight (UTC).
+# The GIF is only committed when it changes.
 name: Koi
 
 on:
   schedule:
-    # Just after midnight UTC, so the koi shows the day that just ended.
-    - cron: "20 0 * * *"
+    - cron: "7 * * * *"
   workflow_dispatch:
   push:
     paths: [.github/workflows/koi.yml]
@@ -20,10 +20,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: yalongwastaken/git-koi@v1
+      - name: Check out the adaptive git-koi source
+        uses: actions/checkout@v7
         with:
-          body: white
-          output-dir: koi
+          repository: finnsmith25-cmd/git-koi
+          path: .git-koi
+      - name: Cache the build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            .git-koi/target
+          key: koi-${{ hashFiles('.git-koi/Cargo.lock', '.git-koi/src/**') }}
+          restore-keys: koi-
+      - name: Build the adaptive koi
+        run: cargo build --release --locked --manifest-path .git-koi/Cargo.toml
+      - name: Draw today's pond
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          koi=.git-koi/target/release/git-koi
+          "$koi" collect "${{ github.repository_owner }}" --output "$RUNNER_TEMP/koi-snapshot.json"
+          "$koi" render "$RUNNER_TEMP/koi-snapshot.json" --output-dir koi --body white
       - name: Commit the koi if it changed
         shell: bash
         run: |
@@ -34,5 +53,5 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit --quiet --message "koi: draw the day's koi"
+          git commit --quiet --message "koi: redraw the pond"
           git push --quiet
